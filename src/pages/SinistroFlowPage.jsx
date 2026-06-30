@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FaArrowRight, FaCheckCircle, FaClock, FaEdit, FaFileAlt, FaGavel, FaHashtag, FaHistory, FaSearchDollar, FaUserTie, FaWallet } from 'react-icons/fa'
+import { FaArrowRight, FaCheckCircle, FaClock, FaEdit, FaFileAlt, FaGavel, FaHashtag, FaHistory, FaProjectDiagram, FaSearchDollar, FaUserTie, FaWallet } from 'react-icons/fa'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import mammoth from 'mammoth'
 import ReactFlow, { addEdge, Background, Controls, MiniMap, useEdgesState, useNodesState } from 'reactflow'
 import 'reactflow/dist/style.css'
 import PeritagemRelatorioPreview from '../components/peritagem/PeritagemRelatorioPreview'
+import SinistroFilterChips from '../components/sinistro/SinistroFilterChips'
+import SinistroProcessosDataTable from '../components/sinistro/SinistroProcessosDataTable'
 import { ensureSinistroDemoProcess, getHistory, getProcesses, requestPeritagem } from '../utils/processes'
 
 const FLOW_STEPS = [
@@ -273,8 +275,13 @@ export default function SinistroFlowPage() {
 
   return (
     <div className="form-page sinistro-flow-page">
-      <h1 className="dash-title">Gerir Fluxo</h1>
-      <p className="form-subtitle">Acompanhe o ciclo completo do processo de sinistro por etapa.</p>
+      <div className="sinistro-page-hero">
+        <div className="sinistro-page-hero__icon"><FaProjectDiagram /></div>
+        <div>
+          <h1 className="dash-title sinistro-page-hero__title">Gerir Fluxo</h1>
+          <p className="form-subtitle">Acompanhe o ciclo completo do processo de sinistro por etapa.</p>
+        </div>
+      </div>
 
       <div className="sinistro-flow-stats">
         <article className="sinistro-stat-card">
@@ -333,125 +340,91 @@ export default function SinistroFlowPage() {
 
       <section className="sinistro-flow-section">
       <h2 className="sinistro-flow-heading">Processos em Curso</h2>
-      <div className="filter-tabs" style={{ marginTop: '0.9rem' }}>
-        {[
-          { id: 'all', label: 'Todos' },
-          { id: 'Iniciado', label: 'Iniciado' },
-          { id: 'Em andamento', label: 'Em andamento' },
-          { id: 'aguardando-gestor', label: 'Aguardando assinatura do gestor' },
-          { id: 'assinado-gestor', label: 'Assinado pelo gestor' },
-          { id: 'Finalizado', label: 'Finalizado' },
-          { id: 'Encerrado', label: 'Encerrado' },
-        ].map((status) => (
-          <button
-            key={status.id}
-            type="button"
-            className={`tab-btn ${statusFilter === status.id ? 'active' : ''}`}
-            onClick={() => {
-              setStatusFilter(status.id)
-              setPage(1)
-            }}
-          >
-            <span>{status.label}</span>
-          </button>
-        ))}
-      </div>
 
-      <div className="users-filter-box">
-        <input
-          type="text"
-          placeholder="Pesquisar por nº sinistro, matrícula ou cliente"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value)
-            setPage(1)
-          }}
+      <div className="sinistro-flow-filters-panel">
+        <SinistroFilterChips
+          label="Status"
+          labelIcon={<FaCheckCircle />}
+          options={[
+            { id: 'all', label: 'Todos' },
+            { id: 'Iniciado', label: 'Iniciado' },
+            { id: 'Em andamento', label: 'Em andamento' },
+            { id: 'aguardando-gestor', label: 'Aguard. gestor' },
+            { id: 'assinado-gestor', label: 'Assinado gestor' },
+            { id: 'Finalizado', label: 'Finalizado' },
+            { id: 'Encerrado', label: 'Encerrado' },
+          ]}
+          value={statusFilter}
+          onChange={(val) => { setStatusFilter(val); setPage(1) }}
+        />
+        <SinistroFilterChips
+          label="Progresso"
+          labelIcon={<FaArrowRight />}
+          options={[
+            { id: 'all', label: 'Todos' },
+            { id: '0', label: '0%' },
+            { id: '1-40', label: '1–40%' },
+            { id: '41-80', label: '41–80%' },
+            { id: '100', label: '100%' },
+          ]}
+          value={progressFilter}
+          onChange={(val) => { setProgressFilter(val); setPage(1) }}
+        />
+        <SinistroFilterChips
+          label="Financeiro"
+          labelIcon={<FaWallet />}
+          options={[
+            { id: 'all', label: 'Todos' },
+            { id: 'pendente', label: 'Pendente' },
+            { id: 'aguardando', label: 'Aguard. contab.' },
+            { id: 'pago', label: 'Pago' },
+          ]}
+          value={financeFilter}
+          onChange={(val) => { setFinanceFilter(val); setPage(1) }}
         />
       </div>
-      <div className="filter-tabs" style={{ marginTop: '0.7rem' }}>
-        {[
-          { id: 'all', label: 'Progresso: Todos' },
-          { id: '0', label: 'Progresso: 0%' },
-          { id: '1-40', label: 'Progresso: 1-40%' },
-          { id: '41-80', label: 'Progresso: 41-80%' },
-          { id: '100', label: 'Progresso: 100%' },
-        ].map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`tab-btn ${progressFilter === item.id ? 'active' : ''}`}
-            onClick={() => {
-              setProgressFilter(item.id)
-              setPage(1)
-            }}
-          >
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="filter-tabs" style={{ marginTop: '0.7rem' }}>
-        {[
-          { id: 'all', label: 'Financeiro: Todos' },
-          { id: 'pendente', label: 'Financeiro: Pendente' },
-          { id: 'aguardando', label: 'Financeiro: Aguardando contabilidade' },
-          { id: 'pago', label: 'Financeiro: Pago' },
-        ].map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`tab-btn ${financeFilter === item.id ? 'active' : ''}`}
-            onClick={() => {
-              setFinanceFilter(item.id)
-              setPage(1)
-            }}
-          >
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
 
-      <div className="table users-table history-process-table">
-        <div className="tr th">
-          <div><span className="juridico-th-label"><FaHashtag /> Nº Sinistro</span></div>
-          <div><span className="juridico-th-label"><FaUserTie /> Cliente</span></div>
-          <div><span className="juridico-th-label"><FaCheckCircle /> Status</span></div>
-          <div><span className="juridico-th-label"><FaWallet /> Estado Financeiro</span></div>
-          <div><span className="juridico-th-label"><FaFileAlt /> Relatório do Perito</span></div>
-          <div><span className="juridico-th-label"><FaEdit /> Ações</span></div>
-        </div>
-
-        {paged.map((item) => {
-          const finance = getFinanceStatus(item)
-          const displayStatus = getDisplayStatus(item)
-          return (
-            <div
-              key={item.id}
-              ref={historyProcessId === item.id ? selectedRowRef : null}
-              className={`tr ${historyProcessId === item.id ? 'tr-selected' : ''}`}
-            >
-              <div className="td-strong">{item.numeroSinistro}</div>
-              <div>{item.cliente}</div>
-              <div>
-                <span className={`pill ${displayStatus.className}`}>
-                  {displayStatus.label}
-                </span>
-              </div>
-              <div>
-                <span className={`pill ${finance.className}`}>{finance.label}</span>
-              </div>
-            <div>
-              {item.peritagemEnviado || item.peritagemRelatorio?.nome ? (
-                <div className="action-buttons">
-                  <button
-                    type="button"
-                    className="btn-table"
-                    onClick={() => setPreviewProcessId(item.id)}
-                  >
+      <SinistroProcessosDataTable
+        searchPlaceholder="Pesquisar por nº sinistro, matrícula ou cliente"
+        searchValue={query}
+        onSearchChange={(val) => { setQuery(val); setPage(1) }}
+        columns={[
+          { key: 'numeroSinistro', label: 'Nº Sinistro', icon: <FaHashtag />, strong: true, minWidth: '130px' },
+          { key: 'cliente', label: 'Cliente', icon: <FaUserTie />, minWidth: '170px' },
+          {
+            key: 'status',
+            label: 'Status',
+            icon: <FaCheckCircle />,
+            minWidth: '160px',
+            render: (item) => {
+              const displayStatus = getDisplayStatus(item)
+              return <span className={`pill ${displayStatus.className}`}>{displayStatus.label}</span>
+            },
+          },
+          {
+            key: 'financeiro',
+            label: 'Estado Financeiro',
+            icon: <FaWallet />,
+            minWidth: '180px',
+            render: (item) => {
+              const finance = getFinanceStatus(item)
+              return <span className={`pill ${finance.className}`}>{finance.label}</span>
+            },
+          },
+          {
+            key: 'perito',
+            label: 'Relatório do Perito',
+            icon: <FaFileAlt />,
+            minWidth: '200px',
+            render: (item) => (
+              item.peritagemEnviado || item.peritagemRelatorio?.nome ? (
+                <div className="sinistro-premium-actions sinistro-premium-actions--inline">
+                  <button type="button" className="sinistro-action-btn sinistro-action-btn--view" onClick={() => setPreviewProcessId(item.id)}>
                     Visualizar
                   </button>
                   {item.peritagemRelatorio?.dataUrl && (
                     <a
-                      className="btn-table"
+                      className="sinistro-action-btn sinistro-action-btn--download"
                       href={item.peritagemRelatorio.dataUrl}
                       download={item.peritagemRelatorio.nome || 'relatorio-pericial'}
                     >
@@ -460,77 +433,57 @@ export default function SinistroFlowPage() {
                   )}
                 </div>
               ) : (
-                <span>Sem relatório</span>
-              )}
-            </div>
-            <div className="action-buttons">
+                <span className="sinistro-muted-cell">Sem relatório</span>
+              )
+            ),
+          },
+        ]}
+        rows={paged}
+        selectedId={historyProcessId}
+        getRowRef={(row, isSelected) => (isSelected ? selectedRowRef : null)}
+        renderActions={(item) => (
+          <>
+            <button
+              type="button"
+              className="sinistro-action-btn sinistro-action-btn--history"
+              onClick={() => { setHistoryProcessId(item.id); setHistoryPage(1) }}
+            >
+              <FaHistory /> Histórico
+            </button>
+            <button
+              type="button"
+              className="sinistro-action-btn sinistro-action-btn--edit"
+              title="Editar processo"
+              onClick={() => navigate(`/Sinistro/Editar?id=${encodeURIComponent(item.id)}`)}
+            >
+              <FaEdit />
+            </button>
+            {item.premioPago === 'Sim' && (
               <button
                 type="button"
-                className="btn-table"
-                onClick={() => {
-                  setHistoryProcessId(item.id)
-                  setHistoryPage(1)
-                }}
+                className="sinistro-action-btn sinistro-action-btn--flow"
+                onClick={() => { requestPeritagem(item.id, 'Edmilson'); setVersion((value) => value + 1) }}
+                disabled={item.peritoSolicitado}
+                title={item.peritoSolicitado ? 'Peritagem já solicitada' : 'Solicitar peritagem'}
               >
-                Histórico
+                {item.peritoSolicitado ? 'Enviada' : 'Perito'}
               </button>
-              <button
-                type="button"
-                className="btn-table icon-only"
-                title="Editar processo"
-                onClick={() => navigate(`/Sinistro/Editar?id=${encodeURIComponent(item.id)}`)}
-              >
-                <FaEdit />
+            )}
+            {item.status === 'Encerrado' && item.juridicoCartaDocumento?.dataUrl && (
+              <button type="button" className="sinistro-action-btn sinistro-action-btn--view" onClick={() => setJuridicoPreviewProcessId(item.id)}>
+                Carta
               </button>
-              {item.premioPago === 'Sim' && (
-                <button
-                  type="button"
-                  className="btn-table"
-                  onClick={() => {
-                    requestPeritagem(item.id, 'Edmilson')
-                    setVersion((value) => value + 1)
-                  }}
-                  disabled={item.peritoSolicitado}
-                  title={item.peritoSolicitado ? 'Peritagem já solicitada' : 'Solicitar peritagem'}
-                >
-                  {item.peritoSolicitado ? 'Peritagem enviada' : 'Solicitar perito'}
-                </button>
-              )}
-              {item.status === 'Encerrado' && item.juridicoCartaDocumento?.dataUrl && (
-                <button
-                  type="button"
-                  className="btn-table"
-                  onClick={() => setJuridicoPreviewProcessId(item.id)}
-                >
-                  Ver carta
-                </button>
-              )}
-            </div>
-            </div>
-          )
-        })}
-
-        {paged.length === 0 && (
-          <div className="tr">
-            <div>Nenhum processo encontrado.</div>
-            <div />
-            <div />
-            <div />
-            <div />
-            <div />
-          </div>
+            )}
+          </>
         )}
-      </div>
-
-      <div className="users-pagination">
-        <button type="button" className="btn-table" disabled={currentPage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-          Anterior
-        </button>
-        <span>Página {currentPage} de {totalPages}</span>
-        <button type="button" className="btn-table" disabled={currentPage === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-          Seguinte
-        </button>
-      </div>
+        emptyMessage="Nenhum processo encontrado."
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount: filtered.length,
+          onPageChange: setPage,
+        }}
+      />
       </section>
 
       {historyProcessId && (

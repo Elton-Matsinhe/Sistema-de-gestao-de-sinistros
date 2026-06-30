@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { FaCalendarAlt, FaCar, FaFileAlt, FaHashtag, FaRegUser, FaSave } from 'react-icons/fa'
+import { FaCalendarAlt, FaCar, FaFileAlt, FaHashtag, FaPlusCircle, FaRegUser, FaSave } from 'react-icons/fa'
+import SinistroDateField from '../components/sinistro/SinistroDateField'
 import { createProcess, peekNextNumeroApolice } from '../utils/processes'
+import { normalizeMatricula } from '../utils/matriculaInput'
 
 export default function SinistroCreatePage() {
   const [numeroSinistro, setNumeroSinistro] = useState('')
@@ -40,8 +42,13 @@ export default function SinistroCreatePage() {
 
   return (
     <div className="form-page">
-      <h1 className="dash-title">Criar Processo</h1>
-      <p className="form-subtitle">Registo inicial do sinistro para iniciar o fluxo interno.</p>
+      <div className="sinistro-page-hero">
+        <div className="sinistro-page-hero__icon"><FaPlusCircle /></div>
+        <div>
+          <h1 className="dash-title sinistro-page-hero__title">Criar Processo</h1>
+          <p className="form-subtitle">Registo inicial do sinistro para iniciar o fluxo interno.</p>
+        </div>
+      </div>
 
       <form className="form-card form-card--wide sinistro-create-grid" onSubmit={handleSubmit}>
         <div className="form-section-title field-full">Dados do processo</div>
@@ -63,15 +70,19 @@ export default function SinistroCreatePage() {
           <small></small>
         </label>
 
-        <label className="field-group">
+        <label className="field-group sinistro-matricula-field">
           <FaCar className="field-icon" />
           <input
             type="text"
-            placeholder="Matrícula"
+            placeholder="Matrícula (ex: ABC-123-XY)"
             required
             value={matricula}
-            onChange={(event) => setMatricula(event.target.value)}
+            onChange={(event) => setMatricula(normalizeMatricula(event.target.value))}
+            style={{ textTransform: 'uppercase' }}
+            autoComplete="off"
+            spellCheck={false}
           />
+          <small></small>
         </label>
 
         <label className="field-group">
@@ -85,33 +96,41 @@ export default function SinistroCreatePage() {
           />
         </label>
 
-        <div className="form-section-title field-full">Datas e descrição</div>
-
-        <label className="field-group">
-          <FaCalendarAlt className="field-icon" />
-          <input type="date" required value={dataAcidente} onChange={(event) => setDataAcidente(event.target.value)} />
-        </label>
-
-        <label className="field-group">
-          <FaCalendarAlt className="field-icon" />
-          <input
-            type="date"
-            required
-            value={dataNotificacao}
-            onChange={(event) => setDataNotificacao(event.target.value)}
-          />
-        </label>
-
-        <label className="field-group field-full">
-          <FaFileAlt className="field-icon" />
-          <input
-            type="text"
-            placeholder="Descrição do acidente"
-            required
-            value={descricao}
-            onChange={(event) => setDescricao(event.target.value)}
-          />
-        </label>
+        <div className="sinistro-dates-card field-full">
+          <div className="sinistro-dates-card__head">
+            <FaCalendarAlt aria-hidden="true" />
+            <div>
+              <h4>Datas e descrição</h4>
+              <p>Indique quando ocorreu o sinistro e quando foi notificado à seguradora.</p>
+            </div>
+          </div>
+          <div className="sinistro-dates-grid">
+            <SinistroDateField
+              label="Data do acidente"
+              hint="Data em que o sinistro ocorreu"
+              value={dataAcidente}
+              onChange={(event) => setDataAcidente(event.target.value)}
+              required
+            />
+            <SinistroDateField
+              label="Data da notificação"
+              hint="Data em que o sinistro foi comunicado"
+              value={dataNotificacao}
+              onChange={(event) => setDataNotificacao(event.target.value)}
+              required
+            />
+          </div>
+          <label className="field-group field-full sinistro-descricao-field">
+            <FaFileAlt className="field-icon" />
+            <input
+              type="text"
+              placeholder="Descrição do acidente"
+              required
+              value={descricao}
+              onChange={(event) => setDescricao(event.target.value)}
+            />
+          </label>
+        </div>
 
         <button type="submit" className="primary-btn form-btn field-full">
           <FaSave />
@@ -123,4 +142,3 @@ export default function SinistroCreatePage() {
     </div>
   )
 }
-

@@ -33,6 +33,8 @@ import CallCenterConsultaPage from './pages/CallCenterConsultaPage'
 import GestorAssinaturasPage from './pages/GestorAssinaturasPage'
 import GestorDocumentosAssinadosPage from './pages/GestorDocumentosAssinadosPage'
 import SinistroRelatoriosPage from './pages/SinistroRelatoriosPage'
+import ParticipacaoSinistroCreatePage from './pages/ParticipacaoSinistroCreatePage'
+import ParticipacaoSinistroListPage from './pages/ParticipacaoSinistroListPage'
 import { getSession, loginLocal, seedUsers } from './utils/auth'
 
 function LoginView() {
@@ -231,6 +233,8 @@ function App() {
           <Route path="/Sinistro/Listar" element={<SinistroListPage />} />
           <Route path="/Sinistro/Fluxo" element={<SinistroFlowPage />} />
           <Route path="/Sinistro/Ordem" element={<SinistroOrdemPage />} />
+          <Route path="/Sinistro/Participacao/Criar" element={<ParticipacaoSinistroCreatePage />} />
+          <Route path="/Sinistro/Participacao/Listar" element={<ParticipacaoSinistroListPage />} />
           <Route path="/Gestor/Assinaturas" element={<GestorAssinaturasPage />} />
           <Route path="/Gestor/Assinados" element={<GestorDocumentosAssinadosPage />} />
           <Route

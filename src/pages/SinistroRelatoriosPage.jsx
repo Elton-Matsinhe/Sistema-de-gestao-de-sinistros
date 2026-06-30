@@ -1,12 +1,26 @@
 import { useMemo, useState } from 'react'
-import { FaDownload, FaFilePdf, FaFilter, FaProjectDiagram, FaTable } from 'react-icons/fa'
+import {
+  FaChartBar,
+  FaCheckCircle,
+  FaDownload,
+  FaFilePdf,
+  FaFilter,
+  FaHashtag,
+  FaMousePointer,
+  FaProjectDiagram,
+  FaTable,
+  FaUserTie,
+} from 'react-icons/fa'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import SinistroFilterChips from '../components/sinistro/SinistroFilterChips'
+import SinistroProcessosDataTable from '../components/sinistro/SinistroProcessosDataTable'
 import { getHistory, getProcesses } from '../utils/processes'
 
 const LETTERHEAD_URL = new URL('../../Papel Timbrado.png', import.meta.url).href
 const REPORT_MARGIN = 18
 const REPORT_TOP_CONTENT_Y = 88
+const PAGE_SIZE = 8
 
 function formatDate(value) {
   if (!value) return '--'
@@ -31,10 +45,19 @@ function getFluxoStage(item) {
   return item.status || 'Iniciado'
 }
 
+const STATUS_OPTIONS = [
+  { id: 'all', label: 'Todos' },
+  { id: 'Iniciado', label: 'Iniciado' },
+  { id: 'Em andamento', label: 'Em andamento' },
+  { id: 'Finalizado', label: 'Finalizado' },
+  { id: 'Encerrado', label: 'Encerrado' },
+]
+
 export default function SinistroRelatoriosPage() {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedId, setSelectedId] = useState('')
+  const [page, setPage] = useState(1)
   const processes = useMemo(() => getProcesses(), [])
   const history = useMemo(() => getHistory(), [])
 
@@ -48,6 +71,13 @@ export default function SinistroRelatoriosPage() {
       return textMatch && statusMatch
     })
   }, [processes, query, statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const paged = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, currentPage])
 
   const buildStageCounts = (list) => {
     const base = {
@@ -222,70 +252,87 @@ export default function SinistroRelatoriosPage() {
     doc.save(`relatorio-${selectedProcess.numeroSinistro || 'processo'}.pdf`)
   }
 
+  const statusPill = (item) => (
+    <span className={`pill ${String(item.status || 'Iniciado').toLowerCase().replace(' ', '')}`}>
+      {item.status || 'Iniciado'}
+    </span>
+  )
+
   return (
     <div className="form-page users-page">
-      <h1 className="dash-title">Relatórios Sinistro</h1>
-      <p className="form-subtitle">
-        Extraia relatórios PDF com papel timbrado, tabelas e diagramas dos processos em todos os estágios ou apenas finalizados.
-      </p>
-
-      <div className="users-filter-box" style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
-        <input
-          type="text"
-          placeholder="Pesquisar por nº sinistro, cliente, matrícula, apólice"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <label className="field-group" style={{ maxWidth: '260px' }}>
-          <FaFilter className="field-icon" />
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="all">Todos os estágios</option>
-            <option value="Finalizado">Finalizados</option>
-            <option value="Encerrado">Encerrados</option>
-            <option value="Em andamento">Em andamento</option>
-            <option value="Iniciado">Iniciado</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="action-buttons" style={{ marginBottom: '0.8rem' }}>
-        <button type="button" className="btn-table" onClick={() => generateGeneralReport('all')}>
-          <FaFilePdf /> Exportar PDF - Todos os estágios
-        </button>
-        <button type="button" className="btn-table" onClick={() => generateGeneralReport('finalizados')}>
-          <FaFilePdf /> Exportar PDF - Finalizados
-        </button>
-        <button type="button" className="btn-table" onClick={generateProcessReport} disabled={!selectedProcess}>
-          <FaDownload /> Gerar relatório do processo selecionado
-        </button>
-      </div>
-
-      <div className="table users-table credit-premium-table sinistro-relatorios-table">
-        <div className="tr th">
-          <div><span className="juridico-th-label"><FaTable /> Nº Sinistro</span></div>
-          <div><span className="juridico-th-label"><FaTable /> Cliente</span></div>
-          <div><span className="juridico-th-label"><FaProjectDiagram /> Estágio</span></div>
-          <div><span className="juridico-th-label"><FaFilePdf /> Status</span></div>
-          <div><span className="juridico-th-label"><FaDownload /> Ações</span></div>
+      <div className="sinistro-page-hero">
+        <div className="sinistro-page-hero__icon"><FaChartBar /></div>
+        <div>
+          <h1 className="dash-title sinistro-page-hero__title">Relatórios Sinistro</h1>
+          <p className="form-subtitle">
+            Extraia relatórios PDF com papel timbrado, tabelas e diagramas dos processos em todos os estágios ou apenas finalizados.
+          </p>
         </div>
-        {filtered.map((item) => (
-          <div key={item.id} className={`tr credit-row ${selectedId === item.id ? 'tr-selected' : ''}`}>
-            <div className="td-strong credit-col">{item.numeroSinistro || '--'}</div>
-            <div className="credit-col">{item.cliente || '--'}</div>
-            <div className="credit-col">{getFluxoStage(item)}</div>
-            <div className="credit-col">
-              <span className={`pill ${String(item.status || 'Iniciado').toLowerCase().replace(' ', '')}`}>
-                {item.status || 'Iniciado'}
-              </span>
-            </div>
-            <div className="action-buttons">
-              <button type="button" className="btn-table" onClick={() => setSelectedId(item.id)}>
-                Selecionar
-              </button>
-            </div>
-          </div>
+      </div>
+
+      <div className="sinistro-relatorios-stats">
+        {Object.entries(stageCounts).map(([stage, count]) => (
+          <article key={stage} className="sinistro-stat-card">
+            <span>{stage}</span>
+            <strong>{count}</strong>
+          </article>
         ))}
       </div>
+
+      <div className="sinistro-relatorios-export-bar">
+        <button type="button" className="sinistro-action-btn sinistro-action-btn--pdf" onClick={() => generateGeneralReport('all')}>
+          <FaFilePdf /> Todos os estágios
+        </button>
+        <button type="button" className="sinistro-action-btn sinistro-action-btn--pdf" onClick={() => generateGeneralReport('finalizados')}>
+          <FaFilePdf /> Finalizados
+        </button>
+        <button type="button" className="sinistro-action-btn sinistro-action-btn--download" onClick={generateProcessReport} disabled={!selectedProcess}>
+          <FaDownload /> Processo selecionado
+        </button>
+      </div>
+
+      <SinistroProcessosDataTable
+        title="Selecionar processo para relatório"
+        titleIcon={<FaTable />}
+        searchPlaceholder="Pesquisar por nº sinistro, cliente, matrícula ou apólice"
+        searchValue={query}
+        onSearchChange={(val) => { setQuery(val); setPage(1) }}
+        toolbar={(
+          <SinistroFilterChips
+            label="Estágio"
+            labelIcon={<FaFilter />}
+            options={STATUS_OPTIONS}
+            value={statusFilter}
+            onChange={(val) => { setStatusFilter(val); setPage(1) }}
+          />
+        )}
+        columns={[
+          { key: 'numeroSinistro', label: 'Nº Sinistro', icon: <FaHashtag />, strong: true, minWidth: '130px' },
+          { key: 'cliente', label: 'Cliente', icon: <FaUserTie />, minWidth: '180px' },
+          {
+            key: 'estagio',
+            label: 'Estágio',
+            icon: <FaProjectDiagram />,
+            minWidth: '150px',
+            render: (item) => getFluxoStage(item),
+          },
+          { key: 'status', label: 'Status', icon: <FaCheckCircle />, minWidth: '130px', render: statusPill },
+        ]}
+        rows={paged}
+        selectedId={selectedId}
+        renderActions={(item) => (
+          <button type="button" className="sinistro-action-btn sinistro-action-btn--select" onClick={() => setSelectedId(item.id)}>
+            <FaMousePointer /> Selecionar
+          </button>
+        )}
+        emptyMessage="Nenhum processo encontrado."
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount: filtered.length,
+          onPageChange: setPage,
+        }}
+      />
     </div>
   )
 }

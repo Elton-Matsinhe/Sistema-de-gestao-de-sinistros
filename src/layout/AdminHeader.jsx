@@ -102,7 +102,15 @@ export default function AdminHeader({ session, onToggleSidebar, notifications })
             </div>
             <div className="dropdown-list">
               {notifications.map((n) => (
-                <button key={n.id} type="button" className="dropdown-item">
+                <button
+                  key={n.id}
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    if (n.link) navigate(n.link)
+                    setNotifOpen(false)
+                  }}
+                >
                   <div className={`dot ${n.status}`} />
                   <div className="dropdown-item-text">
                     <strong>{n.title}</strong>

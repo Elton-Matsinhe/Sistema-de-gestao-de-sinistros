@@ -1,7 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FaCalendarAlt, FaCar, FaCheckCircle, FaFileInvoice, FaTools, FaUserEdit } from 'react-icons/fa'
+import {
+  FaCalendarAlt,
+  FaCar,
+  FaCheckCircle,
+  FaEdit,
+  FaFileInvoice,
+  FaHashtag,
+  FaTools,
+  FaUserEdit,
+  FaUserTie,
+} from 'react-icons/fa'
 import { useSearchParams } from 'react-router-dom'
+import SinistroDateField from '../components/sinistro/SinistroDateField'
+import SinistroProcessosDataTable from '../components/sinistro/SinistroProcessosDataTable'
 import { ensureSinistroDemoProcess, getProcesses, updateProcess } from '../utils/processes'
+import { normalizeMatricula } from '../utils/matriculaInput'
 
 export default function SinistroEditPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -76,46 +89,50 @@ export default function SinistroEditPage() {
     setMessage('Processo atualizado com sucesso.')
   }
 
+  const statusPill = (item) => (
+    <span className={`pill ${String(item.status || 'Iniciado').toLowerCase().replace(' ', '')}`}>
+      {item.status}
+    </span>
+  )
+
   return (
-    <div className="form-page">
-      <h1 className="dash-title">Editar Processo</h1>
-      <p className="form-subtitle">Atualize dados de peritagem, reparação e facturação do processo.</p>
-
-      <div className="users-filter-box">
-        <input
-          type="text"
-          placeholder="Pesquisar por nº sinistro, matrícula ou cliente"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </div>
-
-      <div className="table users-table" style={{ marginBottom: '0.85rem' }}>
-        <div className="tr th">
-          <div>Nº Sinistro</div>
-          <div>Cliente</div>
-          <div>Status</div>
-          <div>Ações</div>
+    <div className="form-page users-page">
+      <div className="sinistro-page-hero">
+        <div className="sinistro-page-hero__icon"><FaEdit /></div>
+        <div>
+          <h1 className="dash-title sinistro-page-hero__title">Editar Processo</h1>
+          <p className="form-subtitle">Atualize dados de peritagem, reparação e facturação do processo.</p>
         </div>
-        {filtered.map((item) => (
-          <div key={item.id} className="tr">
-            <div className="td-strong">{item.numeroSinistro}</div>
-            <div>{item.cliente}</div>
-            <div>
-              <span className={`pill ${String(item.status || 'Iniciado').toLowerCase().replace(' ', '')}`}>
-                {item.status}
-              </span>
-            </div>
-            <div className="action-buttons">
-              <button type="button" className="btn-table" onClick={() => selectProcess(item.id)}>
-                Selecionar
-              </button>
-            </div>
-          </div>
-        ))}
       </div>
 
-      <form className="form-card form-card--wide sinistro-create-grid" onSubmit={handleSubmit}>
+      <SinistroProcessosDataTable
+        title="Selecionar processo"
+        titleIcon={<FaHashtag />}
+        searchPlaceholder="Pesquisar por nº sinistro, matrícula ou cliente"
+        searchValue={query}
+        onSearchChange={setQuery}
+        columns={[
+          { key: 'numeroSinistro', label: 'Nº Sinistro', icon: <FaHashtag />, strong: true, minWidth: '140px' },
+          { key: 'cliente', label: 'Cliente', icon: <FaUserTie />, minWidth: '180px' },
+          {
+            key: 'status',
+            label: 'Status',
+            icon: <FaCheckCircle />,
+            minWidth: '130px',
+            render: statusPill,
+          },
+        ]}
+        rows={filtered}
+        selectedId={selectedId}
+        renderActions={(item) => (
+          <button type="button" className="sinistro-action-btn sinistro-action-btn--select" onClick={() => selectProcess(item.id)}>
+            Selecionar
+          </button>
+        )}
+        emptyMessage="Nenhum processo encontrado."
+      />
+
+      <form className="form-card form-card--wide sinistro-create-grid sinistro-edit-form" onSubmit={handleSubmit}>
         <div className="form-section-title field-full">Dados do processo</div>
 
         <label className="field-group">
@@ -140,15 +157,19 @@ export default function SinistroEditPage() {
           />
         </label>
 
-        <label className="field-group">
+        <label className="field-group sinistro-matricula-field">
           <FaCar className="field-icon" />
           <input
             type="text"
             placeholder="Matrícula"
             required
             value={matricula}
-            onChange={(event) => setMatricula(event.target.value)}
+            onChange={(event) => setMatricula(normalizeMatricula(event.target.value))}
+            style={{ textTransform: 'uppercase' }}
+            autoComplete="off"
+            spellCheck={false}
           />
+          <small></small>
         </label>
 
         <div className="form-section-title field-full">Facturação e operação</div>
@@ -173,10 +194,12 @@ export default function SinistroEditPage() {
           />
         </label>
 
-        <label className="field-group">
-          <FaCalendarAlt className="field-icon" />
-          <input type="date" value={dataFactura} onChange={(event) => setDataFactura(event.target.value)} />
-        </label>
+        <SinistroDateField
+          label="Data da factura"
+          hint=""
+          value={dataFactura}
+          onChange={(event) => setDataFactura(event.target.value)}
+        />
 
         <label className="field-group">
           <FaUserEdit className="field-icon" />
@@ -210,4 +233,3 @@ export default function SinistroEditPage() {
     </div>
   )
 }
-

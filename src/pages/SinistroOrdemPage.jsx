@@ -1,26 +1,59 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FaCheckCircle, FaEye, FaFileUpload, FaPaperPlane, FaTimesCircle } from 'react-icons/fa'
+import { useSearchParams } from 'react-router-dom'
+import {
+  FaCheckCircle,
+  FaDownload,
+  FaEye,
+  FaFileAlt,
+  FaFileUpload,
+  FaHashtag,
+  FaPaperPlane,
+  FaPen,
+  FaPrint,
+  FaTimesCircle,
+  FaTrash,
+  FaUserTie,
+  FaWrench,
+} from 'react-icons/fa'
 import mammoth from 'mammoth'
-import { getSession } from '../utils/auth'
-import { createStampedPdfDataUrl } from '../utils/pdfStamp'
+import OrdemQuatacaoFormBuilder from '../components/ordem/OrdemQuatacaoFormBuilder'
 import AutoDateTimeNotice from '../components/AutoDateTimeNotice'
+import SinistroProcessosDataTable from '../components/sinistro/SinistroProcessosDataTable'
 import { getLocalDateTimeNow } from '../utils/datetime'
 import {
+  ORDEM_DOC_TYPES,
+  createEmptyOrdemReparacaoData,
+  createEmptyQuitacaoData,
+} from '../utils/ordemQuatacaoConfig'
+import {
+  downloadOrdemQuatacaoPdf,
+  ordemQuatacaoPdfToDataUrl,
+  printOrdemQuatacaoPdf,
+} from '../utils/ordemQuatacaoPdf'
+import {
+  clearOrdemDocumento,
   getSinistroDocumentProcesses,
+  saveOrdemFormularioDraft,
   sendDocumentoToGestor,
   sendToContabilidade,
 } from '../utils/processes'
+import { getSession } from '../utils/auth'
 
 const PAGE_SIZE = 5
 
 export default function SinistroOrdemPage() {
+  const [searchParams] = useSearchParams()
   const [version, setVersion] = useState(0)
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState('')
   const [mensagem, setMensagem] = useState('')
+  const [modo, setModo] = useState('criar')
+  const [docType, setDocType] = useState('ordem_reparacao')
+  const [formData, setFormData] = useState(createEmptyOrdemReparacaoData())
   const [ordemFile, setOrdemFile] = useState(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [formPreviewUrl, setFormPreviewUrl] = useState('')
   const [docxPreviewHtml, setDocxPreviewHtml] = useState('')
   const [docxPreviewMessage, setDocxPreviewMessage] = useState('')
   const session = getSession()
@@ -45,35 +78,32 @@ export default function SinistroOrdemPage() {
     () => processos.find((item) => item.id === selectedId) || null,
     [processos, selectedId],
   )
+
   const signedFile = selectedProcess?.gestorAssinadoDocumento || null
   const sourceFile = selectedProcess?.ordemReparacaoDocumento || null
   const signedDataUrl = signedFile?.dataUrl || sourceFile?.dataUrl || ''
   const signedName = signedFile?.nome || sourceFile?.nome || ''
-  const signedSignatureImage =
-    signedFile?.assinaturaDigital?.imagemDataUrl || selectedProcess?.gestorAssinaturaMeta?.assinaturaImagem || ''
-  const signedSignatureOpacity =
-    signedFile?.assinaturaDigital?.opacity ?? selectedProcess?.gestorAssinaturaMeta?.opacity ?? 0.75
-  const signedSignatureX = signedFile?.assinaturaDigital?.x || selectedProcess?.gestorAssinaturaMeta?.x || 40
-  const signedSignatureY = signedFile?.assinaturaDigital?.y || selectedProcess?.gestorAssinaturaMeta?.y || 40
 
-  const handleDownloadSigned = async () => {
+  useEffect(() => {
     if (!selectedProcess) return
-    if (!signedDataUrl) return
-    const fileName = signedName || `assinado-${selectedProcess.numeroSinistro}.pdf`
-    let finalDataUrl = signedDataUrl
-    if (String(fileName).toLowerCase().endsWith('.pdf') && signedSignatureImage) {
-      finalDataUrl = await createStampedPdfDataUrl({
-        pdfDataUrl: signedDataUrl,
-        signatureImageDataUrl: signedSignatureImage,
-        x: signedSignatureX,
-        y: signedSignatureY,
-        opacity: signedSignatureOpacity,
-      })
-    }
-    const anchor = document.createElement('a')
-    anchor.href = finalDataUrl
-    anchor.download = fileName
-    anchor.click()
+    const tipo = selectedProcess.ordemFormularioTipo || 'ordem_reparacao'
+    const base = tipo === 'quitacao'
+      ? createEmptyQuitacaoData(selectedProcess)
+      : createEmptyOrdemReparacaoData(selectedProcess)
+    setDocType(tipo)
+    setFormData({ ...base, ...(selectedProcess.ordemFormularioData || {}) })
+    if (selectedProcess.ordemFormularioOrigem === 'upload') setModo('upload')
+    else if (selectedProcess.ordemFormularioData || selectedProcess.ordemReparacaoDocumento) setModo('criar')
+  }, [selectedProcess?.id, version])
+
+  const handleTypeChange = (tipo) => {
+    setDocType(tipo)
+    if (!selectedProcess) return
+    setFormData(
+      tipo === 'quitacao'
+        ? createEmptyQuitacaoData(selectedProcess)
+        : createEmptyOrdemReparacaoData(selectedProcess),
+    )
   }
 
   const readFileAsDataUrl = (file) =>
@@ -84,9 +114,76 @@ export default function SinistroOrdemPage() {
       reader.readAsDataURL(file)
     })
 
-  const handleEnviarGestor = async () => {
+  const handleGuardarRascunho = () => {
     if (!selectedProcess) return
-    if (!ordemFile) {
+    saveOrdemFormularioDraft(selectedProcess.id, {
+      ordemFormularioTipo: docType,
+      ordemFormularioData: formData,
+    })
+    setVersion((v) => v + 1)
+    setMensagem('Rascunho do formulário guardado no processo.')
+  }
+
+  const handlePreviewFormPdf = async () => {
+    try {
+      const url = await ordemQuatacaoPdfToDataUrl(docType, formData)
+      if (formPreviewUrl) URL.revokeObjectURL(formPreviewUrl)
+      setFormPreviewUrl(url)
+      setPreviewOpen(true)
+      setMensagem('')
+    } catch {
+      setMensagem('Preencha pelo menos um campo para visualizar o PDF.')
+    }
+  }
+
+  const handleDownloadFormPdf = async () => {
+    try {
+      await downloadOrdemQuatacaoPdf(docType, formData, selectedProcess?.numeroSinistro)
+      setMensagem('PDF transferido com sucesso.')
+    } catch {
+      setMensagem('Não foi possível gerar o PDF.')
+    }
+  }
+
+  const handlePrintFormPdf = async () => {
+    try {
+      await printOrdemQuatacaoPdf(docType, formData)
+    } catch {
+      setMensagem('Não foi possível imprimir o PDF.')
+    }
+  }
+
+  const handleEnviarGestorFormulario = async () => {
+    if (!selectedProcess) return
+    try {
+      const dataUrl = await ordemQuatacaoPdfToDataUrl(docType, formData)
+      const meta = ORDEM_DOC_TYPES[docType]
+      const nome = `${meta.filePrefix}-${selectedProcess.numeroSinistro}.pdf`
+      const updated = sendDocumentoToGestor(selectedProcess.id, {
+        ordemReparacaoDocumento: {
+          nome,
+          tipo: 'application/pdf',
+          dataUrl,
+        },
+        ordemReparacaoDataUpload: getLocalDateTimeNow(),
+        enviadoGestorData: getLocalDateTimeNow(),
+        ordemFormularioTipo: docType,
+        ordemFormularioData: formData,
+        ordemFormularioOrigem: 'sistema',
+      })
+      if (!updated) {
+        setMensagem('Falha ao enviar o documento para o gestor.')
+        return
+      }
+      setVersion((v) => v + 1)
+      setMensagem(`Formulário PDF enviado ao gestor: ${updated.numeroSinistro}.`)
+    } catch {
+      setMensagem('Preencha os campos e tente novamente.')
+    }
+  }
+
+  const handleEnviarGestorUpload = async () => {
+    if (!selectedProcess || !ordemFile) {
       setMensagem('Carregue o documento da Ordem/Quitação.')
       return
     }
@@ -106,6 +203,7 @@ export default function SinistroOrdemPage() {
       },
       ordemReparacaoDataUpload: getLocalDateTimeNow(),
       enviadoGestorData: getLocalDateTimeNow(),
+      ordemFormularioOrigem: 'upload',
     })
     if (!updated) {
       setMensagem('Falha ao enviar o documento para o gestor.')
@@ -113,12 +211,32 @@ export default function SinistroOrdemPage() {
     }
     setOrdemFile(null)
     setVersion((v) => v + 1)
-    setMensagem(`Documento enviado ao gestor para assinatura: ${updated.numeroSinistro}.`)
+    setMensagem(`Documento enviado ao gestor: ${updated.numeroSinistro}.`)
+  }
+
+  const handleEliminarDocumento = () => {
+    if (!selectedProcess) return
+    if (
+      !window.confirm(
+        `Tem a certeza de que deseja eliminar o documento Ordem/Quitação do processo ${selectedProcess.numeroSinistro}? Esta acção não pode ser revertida.`,
+      )
+    ) {
+      return
+    }
+    clearOrdemDocumento(selectedProcess.id)
+    setOrdemFile(null)
+    setFormData(
+      docType === 'quitacao'
+        ? createEmptyQuitacaoData(selectedProcess)
+        : createEmptyOrdemReparacaoData(selectedProcess),
+    )
+    setPreviewOpen(false)
+    setVersion((v) => v + 1)
+    setMensagem('Documento eliminado do processo.')
   }
 
   const handleEnviarContabilidade = () => {
-    if (!selectedProcess) return
-    if (!selectedProcess.gestorAssinadoDocumento) {
+    if (!selectedProcess?.gestorAssinadoDocumento) {
       setMensagem('Este processo ainda não foi assinado pelo gestor.')
       return
     }
@@ -141,244 +259,282 @@ export default function SinistroOrdemPage() {
     if (item.enviadoContabilidade) return { label: 'Enviado para Contabilidade', className: 'emandamento' }
     if (item.gestorAssinadoDocumento) return { label: 'Assinado pelo gestor', className: 'finalizado' }
     if (item.enviadoGestor) return { label: 'Aguardando assinatura do gestor', className: 'emandamento' }
-    if (item.ordemReparacaoDocumento) return { label: 'Documento carregado', className: 'iniciado' }
+    if (item.ordemReparacaoDocumento) return { label: 'Documento anexado', className: 'iniciado' }
+    if (item.ordemFormularioData) return { label: 'Rascunho no sistema', className: 'iniciado' }
     return { label: 'Aguardando ordem', className: 'iniciado' }
   }
 
-  const podeEnviarContabilidade = Boolean(selectedProcess?.gestorAssinadoDocumento) && !selectedProcess?.enviadoContabilidade
+  const podeEliminar = Boolean(
+    selectedProcess?.ordemReparacaoDocumento || selectedProcess?.ordemFormularioData,
+  ) && !selectedProcess?.gestorAssinadoDocumento
+
+  useEffect(() => {
+    const processId = searchParams.get('id')
+    if (!processId) return
+    const exists = processos.some((item) => item.id === processId)
+    if (exists) setSelectedId(processId)
+  }, [processos, searchParams])
 
   useEffect(() => {
     let active = true
     const loadDocxPreview = async () => {
       setDocxPreviewHtml('')
       setDocxPreviewMessage('')
-      const file = signedDataUrl ? { dataUrl: signedDataUrl, nome: signedName } : null
-      if (!file?.dataUrl || !file.nome?.toLowerCase().endsWith('.docx')) return
+      if (!signedDataUrl || !signedName?.toLowerCase().endsWith('.docx')) return
       try {
-        const base64 = String(file.dataUrl).split(',')[1] || ''
+        const base64 = String(signedDataUrl).split(',')[1] || ''
         const raw = atob(base64)
         const buffer = new ArrayBuffer(raw.length)
         const bytes = new Uint8Array(buffer)
         for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i)
         const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
         if (!active) return
-        setDocxPreviewHtml(result.value || '<p>Documento sem conteúdo para mostrar.</p>')
+        setDocxPreviewHtml(result.value || '<p>Documento sem conteúdo.</p>')
       } catch {
         if (!active) return
         setDocxPreviewMessage('Não foi possível gerar a pré-visualização deste DOCX.')
       }
     }
-    if (previewOpen) loadDocxPreview()
-    return () => {
-      active = false
-    }
-  }, [previewOpen, signedDataUrl, signedName])
+    if (previewOpen && !formPreviewUrl) loadDocxPreview()
+    return () => { active = false }
+  }, [previewOpen, signedDataUrl, signedName, formPreviewUrl])
+
+  const gestorSlotMode = useMemo(() => {
+    if (selectedProcess?.gestorAssinadoDocumento) return 'signed'
+    if (selectedProcess?.enviadoGestor) return 'sent'
+    return 'reserved'
+  }, [selectedProcess])
 
   return (
-    <div className="form-page users-page">
-      <h1 className="dash-title">Ordem de Reparação e Quitação</h1>
-      <p className="form-subtitle">
-        Carregue a Ordem/Quitação, informe a data e envie ao Gestor para assinatura digital.
-      </p>
-
-      <div className="users-filter-box">
-        <input
-          type="text"
-          placeholder="Pesquisar por nº sinistro, cliente ou matrícula"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value)
-            setPage(1)
-          }}
-        />
-      </div>
-      <div className="table users-table credit-premium-table">
-        <div className="tr th">
-          <div>Nº Sinistro</div>
-          <div>Cliente</div>
-          <div>Etapa Documento</div>
-          <div>Documento</div>
-          <div>Ações</div>
+    <div className="form-page users-page ordem-page">
+      <div className="sinistro-page-hero">
+        <div className="sinistro-page-hero__icon"><FaWrench /></div>
+        <div>
+          <h1 className="dash-title sinistro-page-hero__title">Ordem de Reparação e Quitação</h1>
+          <p className="form-subtitle">
+            Crie o formulário no sistema ou carregue um documento Word/PDF, anexe ao processo e envie ao Gestor para assinatura.
+          </p>
         </div>
-        {paged.map((item) => {
-          const etapa = etapaDocumento(item)
-          return (
-          <div key={item.id} className={`tr credit-row ${selectedId === item.id ? 'tr-selected' : ''}`}>
-            <div className="td-strong credit-col">{item.numeroSinistro}</div>
-            <div className="credit-col">{item.cliente}</div>
-            <div className="credit-col">
-              <span className={`pill ${etapa.className}`}>{etapa.label}</span>
+      </div>
+
+      <SinistroProcessosDataTable
+        title="Processos disponíveis"
+        titleIcon={<FaFileAlt />}
+        searchPlaceholder="Pesquisar por nº sinistro, cliente ou matrícula"
+        searchValue={query}
+        onSearchChange={(val) => { setQuery(val); setPage(1) }}
+        columns={[
+          { key: 'numeroSinistro', label: 'Nº Sinistro', icon: <FaHashtag />, strong: true, minWidth: '130px' },
+          { key: 'cliente', label: 'Cliente', icon: <FaUserTie />, minWidth: '180px' },
+          {
+            key: 'etapa',
+            label: 'Etapa',
+            icon: <FaCheckCircle />,
+            minWidth: '150px',
+            render: (item) => {
+              const etapa = etapaDocumento(item)
+              return <span className={`pill ${etapa.className}`}>{etapa.label}</span>
+            },
+          },
+          {
+            key: 'documento',
+            label: 'Documento',
+            icon: <FaFileAlt />,
+            minWidth: '200px',
+            render: (item) => (
+              <span className="sinistro-premium-cell">
+                {item.ordemReparacaoDocumento?.nome || (item.ordemFormularioData ? 'Rascunho sistema' : '—')}
+              </span>
+            ),
+          },
+        ]}
+        rows={paged}
+        selectedId={selectedId}
+        renderActions={(item) => (
+          <button type="button" className="sinistro-action-btn sinistro-action-btn--select" onClick={() => setSelectedId(item.id)}>
+            Selecionar
+          </button>
+        )}
+        emptyMessage="Nenhum processo encontrado."
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount: filtrados.length,
+          onPageChange: setPage,
+        }}
+      />
+
+      {selectedProcess && (
+        <section className="ordem-workspace ordem-workspace--full">
+          {selectedProcess.gestorAssinadoDocumento && (
+            <div className="ordem-gestor-assinado-alert">
+              <div>
+                <strong>Documento assinado pelo gestor</strong>
+                <p>
+                  {selectedProcess.gestorAssinadoPor || 'Gestor'} em{' '}
+                  {selectedProcess.gestorAssinadoData || '—'} — pode visualizar ou transferir o PDF assinado.
+                </p>
+              </div>
+              <div className="ordem-gestor-assinado-alert__actions">
+                <button
+                  type="button"
+                  className="sinistro-action-btn sinistro-action-btn--view"
+                  onClick={() => {
+                    setFormPreviewUrl('')
+                    setPreviewOpen(true)
+                  }}
+                >
+                  <FaEye /> Visualizar
+                </button>
+                {selectedProcess.gestorAssinadoDocumento?.dataUrl && (
+                  <a
+                    className="sinistro-action-btn sinistro-action-btn--download"
+                    href={selectedProcess.gestorAssinadoDocumento.dataUrl}
+                    download={selectedProcess.gestorAssinadoDocumento.nome || 'documento-assinado.pdf'}
+                  >
+                    <FaDownload /> Baixar
+                  </a>
+                )}
+              </div>
             </div>
-            <div className="credit-col">
-              {item.ordemReparacaoDocumento?.nome || '--'}
-            </div>
-            <div className="action-buttons">
-              <button type="button" className="btn-table" onClick={() => setSelectedId(item.id)}>
-                Selecionar
+          )}
+
+          <div className="ordem-workspace__head">
+            <h3>{selectedProcess.numeroSinistro} — {selectedProcess.cliente}</h3>
+            <div className="ordem-mode-tabs">
+              <button type="button" className={`ordem-mode-tab ${modo === 'criar' ? 'active' : ''}`} onClick={() => setModo('criar')}>
+                <FaPen /> Criar no sistema
+              </button>
+              <button type="button" className={`ordem-mode-tab ${modo === 'upload' ? 'active' : ''}`} onClick={() => setModo('upload')}>
+                <FaFileUpload /> Carregar ficheiro
               </button>
             </div>
           </div>
-          )
-        })}
-        {paged.length === 0 && (
-          <div className="tr">
-            <div>Nenhum processo encontrado.</div>
-            <div />
-            <div />
-            <div />
-            <div />
-          </div>
-        )}
-      </div>
 
-      <div className="users-pagination">
-        <button type="button" className="btn-table" disabled={currentPage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-          Anterior
-        </button>
-        <span>Página {currentPage} de {totalPages}</span>
-        <button type="button" className="btn-table" disabled={currentPage === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-          Seguinte
-        </button>
-      </div>
+          {modo === 'criar' ? (
+            <>
+              <div className="ordem-type-picker">
+                <span className="ordem-type-picker__label">Tipo de formulário:</span>
+                {Object.values(ORDEM_DOC_TYPES).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`ordem-type-btn ${docType === t.id ? 'active' : ''}`}
+                    style={{ '--ordem-color': t.color }}
+                    onClick={() => handleTypeChange(t.id)}
+                  >
+                    <FaFileAlt /> {t.shortLabel}
+                  </button>
+                ))}
+              </div>
 
-      {selectedProcess && (
-        <section className="form-card form-card--wide" style={{ marginTop: '1rem' }}>
-          <h3 style={{ marginTop: 0 }}>
-            {selectedProcess.numeroSinistro} - {selectedProcess.cliente}
-          </h3>
-
-          <p className="form-subtitle" style={{ marginBottom: '0.3rem' }}>Documento Word da Ordem/Quitação</p>
-          <div
-            style={{
-              border: '1px dashed #c8d7e7',
-              borderRadius: '10px',
-              padding: '0.8rem',
-              marginBottom: '0.8rem',
-              background: '#f8fbff',
-            }}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault()
-              const droppedFile = event.dataTransfer.files?.[0]
-              if (droppedFile) setOrdemFile(droppedFile)
-            }}
-          >
-            <div className="field-group" style={{ marginBottom: '0.5rem' }}>
-              <FaFileUpload className="field-icon" />
-              <input
-                type="file"
-                accept=".doc,.docx,.pdf,.xls,.xlsx,.ppt,.pptx"
-                onChange={(event) => setOrdemFile(event.target.files?.[0] || null)}
+              <OrdemQuatacaoFormBuilder
+                typeId={docType}
+                data={formData}
+                onChange={setFormData}
+                gestorNomeDefault={session?.name || ''}
+                gestorSlotMode={gestorSlotMode}
               />
-            </div>
-            <small>Também pode arrastar e largar o documento aqui.</small>
-          </div>
 
-          <AutoDateTimeNotice label="Data da edição da ordem" />
+              <div className="ordem-form-actions">
+                <button type="button" className="btn-table" onClick={handleGuardarRascunho}>
+                  Guardar rascunho no processo
+                </button>
+                <button type="button" className="btn-table" onClick={handlePreviewFormPdf}>
+                  <FaEye /> Visualizar PDF
+                </button>
+                <button type="button" className="btn-table" onClick={handlePrintFormPdf}>
+                  <FaPrint /> Imprimir
+                </button>
+                <button type="button" className="btn-table" onClick={handleDownloadFormPdf}>
+                  <FaDownload /> Baixar PDF
+                </button>
+                <button type="button" className="primary-btn" onClick={handleEnviarGestorFormulario}>
+                  <FaPaperPlane /> Enviar ao Gestor
+                </button>
+                {podeEliminar && (
+                  <button type="button" className="btn-table ordem-btn-delete" onClick={handleEliminarDocumento}>
+                    <FaTrash /> Eliminar documento
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="form-subtitle">Documento Word ou PDF da Ordem/Quitação</p>
+              <div className="ordem-upload-zone"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const f = e.dataTransfer.files?.[0]
+                  if (f) setOrdemFile(f)
+                }}
+              >
+                <FaFileUpload />
+                <input type="file" accept=".doc,.docx,.pdf" onChange={(e) => setOrdemFile(e.target.files?.[0] || null)} />
+                <small>Arraste e largue ou seleccione o ficheiro</small>
+              </div>
+              <AutoDateTimeNotice label="Data da edição da ordem" />
+              <div className="ordem-form-actions">
+                <button type="button" className="primary-btn" onClick={handleEnviarGestorUpload}>
+                  <FaPaperPlane /> Enviar ao Gestor
+                </button>
+                {selectedProcess.ordemReparacaoDocumento && (
+                  <button type="button" className="btn-table" onClick={() => { setFormPreviewUrl(''); setPreviewOpen(true) }}>
+                    <FaEye /> Visualizar documento
+                  </button>
+                )}
+                {podeEliminar && (
+                  <button type="button" className="btn-table ordem-btn-delete" onClick={handleEliminarDocumento}>
+                    <FaTrash /> Eliminar documento
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
-          <button type="button" className="btn-table" onClick={handleEnviarGestor}>
-            <FaPaperPlane /> Enviar ao Gestor para assinatura
-          </button>
-
-          {selectedProcess?.gestorAssinadoDocumento && (
+          <div className="ordem-contabilidade-block">
+            <AutoDateTimeNotice label="Data de aprovação para envio à Contabilidade" />
             <button
               type="button"
               className="btn-table"
-              style={{ marginLeft: '0.55rem' }}
-              onClick={() => setPreviewOpen(true)}
+              onClick={handleEnviarContabilidade}
+              disabled={!selectedProcess.gestorAssinadoDocumento || selectedProcess.enviadoContabilidade}
             >
-              <FaEye /> Visualizar documento assinado
+              <FaCheckCircle /> Enviar para Contabilidade
             </button>
-          )}
-
-          <div style={{ marginTop: '1rem' }}>
-            <AutoDateTimeNotice label="Data de aprovação para envio à Contabilidade" />
           </div>
-          <button type="button" className="btn-table" onClick={handleEnviarContabilidade} disabled={!podeEnviarContabilidade}>
-            <FaCheckCircle /> Assinar e enviar para Contabilidade
-          </button>
 
-          {mensagem && <p className="form-message" style={{ marginTop: '0.8rem' }}>{mensagem}</p>}
+          {mensagem && <p className="form-success">{mensagem}</p>}
         </section>
       )}
 
-      {selectedProcess && previewOpen && (
-        <section className="form-card form-card--wide" style={{ marginTop: '1rem' }}>
-          <div className="action-buttons" style={{ justifyContent: 'space-between' }}>
-            <h3 style={{ margin: 0 }}>
-              Preview assinado - {selectedProcess.numeroSinistro}
-            </h3>
-            <div className="action-buttons">
-              <button type="button" className="btn-table" onClick={handleDownloadSigned}>
-                Baixar assinado
-              </button>
-              <button type="button" className="btn-table" onClick={() => setPreviewOpen(false)}>
-                <FaTimesCircle /> Fechar
-              </button>
-            </div>
+      {previewOpen && (
+        <section className="ordem-preview-panel ordem-preview-panel--full">
+          <div className="ordem-preview-panel__head">
+            <h3>Pré-visualização do documento</h3>
+            <button type="button" className="btn-table" onClick={() => { setPreviewOpen(false); setFormPreviewUrl('') }}>
+              <FaTimesCircle /> Fechar
+            </button>
           </div>
-
-          {signedDataUrl && signedName?.toLowerCase().endsWith('.pdf') && (
-            <div style={{ position: 'relative' }}>
-              <iframe
-                title="Preview do documento assinado PDF"
-                src={signedDataUrl}
-                style={{ width: '100%', height: '520px', border: '1px solid #d8e2eb', borderRadius: '12px' }}
-              />
-              {signedSignatureImage && !signedFile?.pdfStamped && (
-                <img
-                  src={signedSignatureImage}
-                  alt="Assinatura aplicada"
-                  style={{
-                    position: 'absolute',
-                    left: `${signedSignatureX}px`,
-                    top: `${signedSignatureY}px`,
-                    maxWidth: '180px',
-                    maxHeight: '72px',
-                    background: 'transparent',
-                    opacity: signedSignatureOpacity,
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
-            </div>
+          {formPreviewUrl && (
+            <iframe title="Preview PDF" src={formPreviewUrl} className="ordem-preview-iframe" />
           )}
-
-          {signedDataUrl && signedName?.toLowerCase().endsWith('.docx') && (
-              <div
-                style={{
-                  position: 'relative',
-                  minHeight: '320px',
-                  border: '1px solid #d8e2eb',
-                  borderRadius: '12px',
-                  padding: '1rem',
-                  background: '#fff',
-                }}
-              >
-                {docxPreviewMessage && <p>{docxPreviewMessage}</p>}
-                {!docxPreviewMessage && (
-                  <div dangerouslySetInnerHTML={{ __html: docxPreviewHtml || '<p>A carregar pré-visualização...</p>' }} />
-                )}
-                {signedSignatureImage && (
-                  <img
-                    src={signedSignatureImage}
-                    alt="Assinatura aplicada"
-                    style={{
-                      position: 'absolute',
-                      left: `${signedSignatureX}px`,
-                      top: `${signedSignatureY}px`,
-                      maxWidth: '180px',
-                      maxHeight: '72px',
-                      background: 'transparent',
-                      opacity: signedSignatureOpacity,
-                    }}
-                  />
-                )}
-              </div>
-            )}
+          {!formPreviewUrl && selectedProcess?.gestorAssinadoDocumento?.dataUrl && (
+            <iframe
+              title="Preview assinado pelo gestor"
+              src={selectedProcess.gestorAssinadoDocumento.dataUrl}
+              className="ordem-preview-iframe"
+            />
+          )}
+          {!formPreviewUrl && !selectedProcess?.gestorAssinadoDocumento?.dataUrl && signedDataUrl && signedName?.toLowerCase().endsWith('.pdf') && (
+            <iframe title="Preview assinado" src={signedDataUrl} className="ordem-preview-iframe" />
+          )}
+          {!formPreviewUrl && signedDataUrl && signedName?.toLowerCase().endsWith('.docx') && (
+            <div className="ordem-docx-preview" dangerouslySetInnerHTML={{ __html: docxPreviewHtml || docxPreviewMessage }} />
+          )}
         </section>
       )}
     </div>
   )
 }
-

@@ -13,13 +13,21 @@ import {
   FaUsers,
   FaListAlt,
   FaUserCheck,
+  FaFileSignature,
 } from 'react-icons/fa'
 
-function SidebarItem({ to, icon, label, collapsed, isActive }) {
+function isRouteActive(pathname, to) {
+  if (pathname === to) return true
+  if (to !== '/Dashboard' && pathname.startsWith(`${to}/`)) return true
+  return false
+}
+
+function SidebarItem({ to, icon, label, collapsed, pathname }) {
+  const active = isRouteActive(pathname, to)
   return (
     <NavLink
       to={to}
-      className={`side-item ${isActive ? 'active' : ''}`}
+      className={`side-item ${active ? 'active' : ''}`}
       title={collapsed ? label : undefined}
     >
       <span className="side-icon">{icon}</span>
@@ -50,6 +58,8 @@ export default function AdminSidebar({ collapsed, session }) {
         { to: '/Sinistro/Criar', icon: <FaFileAlt />, label: 'Criar Processo' },
         { to: '/Sinistro/Editar', icon: <FaClipboardCheck />, label: 'Editar Processo' },
         { to: '/Sinistro/Listar', icon: <FaListAlt />, label: 'Listar Processo' },
+        { to: '/Sinistro/Participacao/Criar', icon: <FaFileSignature />, label: 'Participação · Criar' },
+        { to: '/Sinistro/Participacao/Listar', icon: <FaListAlt />, label: 'Participação · Listar' },
         { to: '/Sinistro/Fluxo', icon: <FaProjectDiagram />, label: 'Gerir Fluxo' },
         { to: '/Sinistro/Ordem', icon: <FaFileAlt />, label: 'Ordem/Quitação' },
         { to: '/Relatorios', icon: <FaChartBar />, label: 'Relatórios' },
@@ -123,7 +133,7 @@ export default function AdminSidebar({ collapsed, session }) {
             icon={it.icon}
             label={it.label}
             collapsed={collapsed}
-            isActive={location.pathname === it.to}
+            pathname={location.pathname}
           />
         ))}
       </nav>

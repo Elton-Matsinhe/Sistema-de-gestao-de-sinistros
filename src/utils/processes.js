@@ -580,6 +580,9 @@ export function sendDocumentoToGestor(processoId, payload) {
           ...item,
           ordemReparacaoDocumento: payload.ordemReparacaoDocumento,
           ordemReparacaoDataUpload: payload.ordemReparacaoDataUpload,
+          ordemFormularioTipo: payload.ordemFormularioTipo ?? item.ordemFormularioTipo ?? null,
+          ordemFormularioData: payload.ordemFormularioData ?? item.ordemFormularioData ?? null,
+          ordemFormularioOrigem: payload.ordemFormularioOrigem ?? item.ordemFormularioOrigem ?? 'upload',
           enviadoGestor: true,
           enviadoGestorData: payload.enviadoGestorData,
           gestorAssinaturaMeta: null,
@@ -598,6 +601,51 @@ export function sendDocumentoToGestor(processoId, payload) {
   return updated
 }
 
+export function saveOrdemFormularioDraft(processoId, payload) {
+  const current = getProcesses()
+  const next = current.map((item) =>
+    item.id === processoId
+      ? {
+          ...item,
+          ordemFormularioTipo: payload.ordemFormularioTipo,
+          ordemFormularioData: payload.ordemFormularioData,
+          ordemFormularioOrigem: 'sistema',
+          updatedAt: new Date().toISOString(),
+        }
+      : item,
+  )
+  saveProcesses(next)
+  return next.find((item) => item.id === processoId) || null
+}
+
+export function clearOrdemDocumento(processoId) {
+  const current = getProcesses()
+  const next = current.map((item) =>
+    item.id === processoId
+      ? {
+          ...item,
+          ordemReparacaoDocumento: null,
+          ordemReparacaoDataUpload: '',
+          ordemFormularioTipo: null,
+          ordemFormularioData: null,
+          ordemFormularioOrigem: null,
+          enviadoGestor: false,
+          enviadoGestorData: '',
+          gestorAssinaturaMeta: null,
+          gestorAssinadoDocumento: null,
+          gestorAssinadoData: '',
+          gestorAssinadoPor: '',
+          updatedAt: new Date().toISOString(),
+        }
+      : item,
+  )
+  saveProcesses(next)
+  const updated = next.find((item) => item.id === processoId)
+  if (!updated) return null
+  appendHistory(`Documento Ordem/Quitação removido (${updated.numeroSinistro})`, processoId)
+  return updated
+}
+
 export function assinarComoGestor(processoId, payload) {
   const current = getProcesses()
   const next = current.map((item) =>
@@ -608,6 +656,8 @@ export function assinarComoGestor(processoId, payload) {
           gestorAssinadoDocumento: payload.gestorAssinadoDocumento,
           gestorAssinadoData: payload.gestorAssinadoData,
           gestorAssinadoPor: payload.gestorAssinadoPor,
+          ordemFormularioData: payload.ordemFormularioData ?? item.ordemFormularioData,
+          ordemReparacaoDocumento: payload.ordemReparacaoDocumento ?? item.ordemReparacaoDocumento,
           status: 'Em andamento',
           updatedAt: new Date().toISOString(),
         }
@@ -751,12 +801,24 @@ export function getRoleNotifications(role) {
   }
   if (role === 'sinistro') {
     const recebidas = getSinistroPeritagensRecebidas()
-    return recebidas.slice(0, 6).map((item) => ({
-      id: `sinistro_peritagem_${item.id}`,
-      title: `Peritagem recebida: ${item.numeroSinistro}`,
-      meta: `${item.cliente} • formulário, materiais e 6 fotos`,
-      status: 'pendente',
-    }))
+    const docsAssinados = processes.filter(
+      (item) => item.gestorAssinadoDocumento && item.enviadoGestor && !item.enviadoContabilidade,
+    )
+    return [
+      ...docsAssinados.slice(0, 4).map((item) => ({
+        id: `sinistro_gestor_${item.id}`,
+        title: `Documento assinado pelo gestor: ${item.numeroSinistro}`,
+        meta: `${item.cliente} • ${item.gestorAssinadoPor || 'Gestor'} • ver ou baixar`,
+        status: 'pendente',
+        link: `/Sinistro/Ordem?id=${encodeURIComponent(item.id)}`,
+      })),
+      ...recebidas.slice(0, 4).map((item) => ({
+        id: `sinistro_peritagem_${item.id}`,
+        title: `Peritagem recebida: ${item.numeroSinistro}`,
+        meta: `${item.cliente} • formulário, materiais e 6 fotos`,
+        status: 'pendente',
+      })),
+    ]
   }
 
   const finalized = processes.filter((item) => item.status === 'Finalizado')

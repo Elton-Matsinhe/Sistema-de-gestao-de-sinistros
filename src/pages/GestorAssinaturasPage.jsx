@@ -12,9 +12,12 @@ import {
   FaUserTie,
 } from 'react-icons/fa'
 import mammoth from 'mammoth'
+import OrdemQuatacaoFormBuilder from '../components/ordem/OrdemQuatacaoFormBuilder'
 import { getSession } from '../utils/auth'
 import { getLocalDateTimeNow } from '../utils/datetime'
 import { createStampedPdfDataUrl } from '../utils/pdfStamp'
+import { ORDEM_DOC_TYPES } from '../utils/ordemQuatacaoConfig'
+import { ordemQuatacaoPdfToDataUrl } from '../utils/ordemQuatacaoPdf'
 import {
   assinarComoGestor,
   getGestorPendingProcesses,
@@ -71,6 +74,7 @@ export default function GestorAssinaturasPage() {
   const containerRef = useRef(null)
   const assinaturaRef = useRef(null)
   const drawCanvasRef = useRef(null)
+  const [formData, setFormData] = useState(null)
   const session = getSession()
 
   const pendentes = useMemo(() => getGestorPendingProcesses(), [version])
@@ -78,6 +82,18 @@ export default function GestorAssinaturasPage() {
     () => pendentes.find((item) => item.id === selectedId) || null,
     [pendentes, selectedId],
   )
+
+  const isSistemaForm = Boolean(
+    selected?.ordemFormularioOrigem === 'sistema' && selected?.ordemFormularioData,
+  )
+
+  useEffect(() => {
+    if (!selected || !isSistemaForm) {
+      setFormData(null)
+      return
+    }
+    setFormData({ ...selected.ordemFormularioData })
+  }, [selected, isSistemaForm])
 
   useEffect(() => {
     if (!selected) {
@@ -215,7 +231,60 @@ export default function GestorAssinaturasPage() {
     return canvas.toDataURL('image/png')
   }
 
+  const handleAssinarSistema = async () => {
+    if (isSubmitting || !selected || !formData) return
+    const sig = formData.assinaturaGestor
+    if (!sig?.imagemDataUrl) {
+      setMessage('Confirme a assinatura no painel «Assinatura do Gestor de Sinistro» (lado direito) com o botão «Confirmar assinatura».')
+      return
+    }
+    setIsSubmitting(true)
+    setMessage('A gerar PDF assinado e enviar ao Sinistro...')
+    try {
+      const tipo = selected.ordemFormularioTipo || 'ordem_reparacao'
+      const merged = {
+        ...selected.ordemFormularioData,
+        ...formData,
+        autorizadoPor: formData.assinaturaGestor.nome || session?.name || '',
+        dataAutorizacao: formData.dataAutorizacao || new Date().toISOString().slice(0, 10),
+      }
+      const dataUrl = await ordemQuatacaoPdfToDataUrl(tipo, merged)
+      const meta = ORDEM_DOC_TYPES[tipo]
+      const updated = assinarComoGestor(selected.id, {
+        ordemFormularioData: merged,
+        gestorAssinaturaMeta: {
+          modo: formData.assinaturaGestor.modo,
+          texto: formData.assinaturaGestor.nome,
+        },
+        gestorAssinadoDocumento: {
+          nome: `assinado-${meta?.filePrefix || 'Documento'}-${selected.numeroSinistro}.pdf`,
+          tipo: 'application/pdf',
+          dataUrl,
+          pdfStamped: true,
+        },
+        gestorAssinadoData: getLocalDateTimeNow(),
+        gestorAssinadoPor: session?.name || formData.assinaturaGestor.nome || 'Gestor',
+      })
+      if (!updated) {
+        setMessage('Não foi possível assinar o documento.')
+        return
+      }
+      setVersion((v) => v + 1)
+      setSelectedId('')
+      setFormData(null)
+      setMessage(`Documento assinado e enviado ao Sinistro: ${updated.numeroSinistro}.`)
+    } catch (error) {
+      setMessage(`Erro ao assinar: ${error?.message || 'falha inesperada'}`)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleAssinar = async () => {
+    if (isSistemaForm) {
+      await handleAssinarSistema()
+      return
+    }
     if (isSubmitting) return
     if (!selected) {
       setMessage('Selecione um documento pendente.')
@@ -336,6 +405,41 @@ export default function GestorAssinaturasPage() {
             {selected.numeroSinistro} - {selected.cliente}
           </h3>
 
+          {isSistemaForm && formData && (
+            <>
+              <p className="form-subtitle">
+                Documento criado no sistema — assine no campo reservado à direita («Assinatura do Gestor de Sinistro»).
+              </p>
+              {selected.ordemReparacaoDocumento?.dataUrl && (
+                <iframe
+                  title="Pré-visualização do documento"
+                  src={selected.ordemReparacaoDocumento.dataUrl}
+                  className="ordem-preview-iframe"
+                  style={{ marginBottom: '1rem' }}
+                />
+              )}
+              <OrdemQuatacaoFormBuilder
+                typeId={selected.ordemFormularioTipo || 'ordem_reparacao'}
+                data={formData}
+                onChange={setFormData}
+                gestorNomeDefault={session?.name || ''}
+                gestorSlotMode="edit"
+                signaturesOnly
+              />
+              <button
+                type="button"
+                className="primary-btn form-btn"
+                style={{ marginTop: '0.8rem' }}
+                onClick={handleAssinar}
+                disabled={isSubmitting}
+              >
+                <FaCheckCircle /> {isSubmitting ? 'A enviar...' : 'Assinar e enviar para o Sinistro'}
+              </button>
+            </>
+          )}
+
+          {!isSistemaForm && (
+          <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <label className="field-group">
               <FaUserTie className="field-icon" />
@@ -524,6 +628,8 @@ export default function GestorAssinaturasPage() {
           >
             <FaCheckCircle /> {isSubmitting ? 'A enviar...' : 'Assinar e enviar para o Sinistro'}
           </button>
+          </>
+          )}
         </section>
       )}
       {message && <p className="form-message" style={{ marginTop: '0.8rem' }}>{message}</p>}

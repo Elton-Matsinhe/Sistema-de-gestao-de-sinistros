@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FaEdit, FaFileAlt, FaSearch } from 'react-icons/fa'
+import { FaCheckCircle, FaEdit, FaFileAlt, FaHashtag, FaListUl, FaUserTie } from 'react-icons/fa'
 import { useNavigate } from 'react-router-dom'
+import SinistroFilterChips from '../components/sinistro/SinistroFilterChips'
+import SinistroProcessosDataTable from '../components/sinistro/SinistroProcessosDataTable'
 import { ensureSinistroDemoProcess, getProcesses } from '../utils/processes'
 
 const PAGE_SIZE = 5
+
+const STATUS_OPTIONS = [
+  { id: 'all', label: 'Todos' },
+  { id: 'Iniciado', label: 'Iniciado' },
+  { id: 'Em andamento', label: 'Em andamento' },
+  { id: 'Finalizado', label: 'Finalizado' },
+  { id: 'Encerrado', label: 'Encerrado' },
+]
 
 export default function SinistroListPage() {
   const navigate = useNavigate()
@@ -36,100 +46,71 @@ export default function SinistroListPage() {
     return filtered.slice(start, start + PAGE_SIZE)
   }, [currentPage, filtered])
 
+  const statusPill = (item) => (
+    <span className={`pill ${String(item.status || 'Iniciado').toLowerCase().replace(' ', '')}`}>
+      {item.status || 'Iniciado'}
+    </span>
+  )
+
   return (
     <div className="form-page users-page">
-      <h1 className="dash-title">Listar Processo</h1>
-      <p className="form-subtitle">Tabela de processos com filtros, paginação e ações rápidas.</p>
-
-      <div className="filter-tabs">
-        {['all', 'Iniciado', 'Em andamento', 'Finalizado', 'Encerrado'].map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={`tab-btn ${status === item ? 'active' : ''}`}
-            onClick={() => {
-              setStatus(item)
-              setPage(1)
-            }}
-          >
-            <span>{item === 'all' ? 'Todos' : item}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="users-filter-box">
-        <label className="field-group">
-          <FaSearch className="field-icon" />
-          <input
-            type="text"
-            placeholder="Pesquisar por nº sinistro, cliente ou matrícula"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value)
-              setPage(1)
-            }}
-          />
-        </label>
-      </div>
-
-      <div className="table users-table">
-        <div className="tr th">
-          <div>Nº Sinistro</div>
-          <div>Cliente</div>
-          <div>Status</div>
-          <div>Ações</div>
+      <div className="sinistro-page-hero">
+        <div className="sinistro-page-hero__icon"><FaListUl /></div>
+        <div>
+          <h1 className="dash-title sinistro-page-hero__title">Listar Processo</h1>
+          <p className="form-subtitle">Tabela de processos com filtros, paginação e ações rápidas.</p>
         </div>
+      </div>
 
-        {paged.map((item) => (
-          <div key={item.id} className="tr">
-            <div className="td-strong">{item.numeroSinistro}</div>
-            <div>{item.cliente}</div>
-            <div>
-              <span className={`pill ${String(item.status || 'Iniciado').toLowerCase().replace(' ', '')}`}>
-                {item.status || 'Iniciado'}
-              </span>
-            </div>
-            <div className="action-buttons">
-              <button
-                type="button"
-                className="btn-table icon-only"
-                title="Editar processo"
-                onClick={() => navigate(`/Sinistro/Editar?id=${encodeURIComponent(item.id)}`)}
-              >
-                <FaEdit />
-              </button>
-              <button
-                type="button"
-                className="btn-table icon-only"
-                title="Gerir fluxo"
-                onClick={() => navigate(`/Sinistro/Fluxo?id=${encodeURIComponent(item.id)}`)}
-              >
-                <FaFileAlt />
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {paged.length === 0 && (
-          <div className="tr">
-            <div>Nenhum processo encontrado.</div>
-            <div />
-            <div />
-            <div />
-          </div>
+      <SinistroProcessosDataTable
+        title="Processos registados"
+        titleIcon={<FaFileAlt />}
+        searchPlaceholder="Pesquisar por nº sinistro, cliente ou matrícula"
+        searchValue={query}
+        onSearchChange={(val) => { setQuery(val); setPage(1) }}
+        toolbar={(
+          <SinistroFilterChips
+            label="Status"
+            labelIcon={<FaCheckCircle />}
+            options={STATUS_OPTIONS}
+            value={status}
+            onChange={(val) => { setStatus(val); setPage(1) }}
+          />
         )}
-      </div>
-
-      <div className="users-pagination">
-        <button type="button" className="btn-table" disabled={currentPage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-          Anterior
-        </button>
-        <span>Página {currentPage} de {totalPages}</span>
-        <button type="button" className="btn-table" disabled={currentPage === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-          Seguinte
-        </button>
-      </div>
+        columns={[
+          { key: 'numeroSinistro', label: 'Nº Sinistro', icon: <FaHashtag />, strong: true, minWidth: '140px' },
+          { key: 'cliente', label: 'Cliente', icon: <FaUserTie />, minWidth: '200px' },
+          { key: 'status', label: 'Status', icon: <FaCheckCircle />, minWidth: '130px', render: statusPill },
+        ]}
+        rows={paged}
+        renderActions={(item) => (
+          <>
+            <button
+              type="button"
+              className="sinistro-action-btn sinistro-action-btn--edit"
+              title="Editar processo"
+              onClick={() => navigate(`/Sinistro/Editar?id=${encodeURIComponent(item.id)}`)}
+            >
+              <FaEdit />
+            </button>
+            <button
+              type="button"
+              className="sinistro-action-btn sinistro-action-btn--flow"
+              title="Gerir fluxo"
+              onClick={() => navigate(`/Sinistro/Fluxo?id=${encodeURIComponent(item.id)}`)}
+            >
+              <FaFileAlt />
+            </button>
+          </>
+        )}
+        emptyMessage="Nenhum processo encontrado."
+        pagination={{
+          currentPage,
+          totalPages,
+          totalCount: filtered.length,
+          onPageChange: setPage,
+        }}
+      />
     </div>
   )
 }
-
